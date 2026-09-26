@@ -1,13 +1,14 @@
 package com.youssef.batch;
 
+import jakarta.persistence.EntityManagerFactory;
 import lombok.RequiredArgsConstructor;
 import org.springframework.batch.core.Job;
 import org.springframework.batch.core.Step;
 import org.springframework.batch.core.job.builder.JobBuilder;
 import org.springframework.batch.core.repository.JobRepository;
 import org.springframework.batch.core.step.builder.StepBuilder;
-import org.springframework.batch.item.database.JdbcBatchItemWriter;
-import org.springframework.batch.item.database.builder.JdbcBatchItemWriterBuilder;
+import org.springframework.batch.item.database.JpaItemWriter;
+import org.springframework.batch.item.database.builder.JpaItemWriterBuilder;
 import org.springframework.batch.item.file.FlatFileItemReader;
 import org.springframework.batch.item.file.LineMapper;
 import org.springframework.batch.item.file.mapping.BeanWrapperFieldSetMapper;
@@ -18,15 +19,13 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.transaction.PlatformTransactionManager;
 
-import javax.sql.DataSource;
-
 @Configuration
 @RequiredArgsConstructor
 public class BatchConfig {
 
     private final JobRepository jobRepository;
     private final PlatformTransactionManager transactionManager;
-    private final DataSource dataSource;
+    private final EntityManagerFactory entityManagerFactory;
 
     @Bean
     public FlatFileItemReader<Person> reader() {
@@ -46,21 +45,19 @@ public class BatchConfig {
     }
 
     @Bean
-    public JdbcBatchItemWriter<Person> writer(DataSource dataSource) {
-        return new JdbcBatchItemWriterBuilder<Person>()
-                .sql("INSERT INTO people (name, age, city) VALUES (:name, :age, :city)")
-                .dataSource(dataSource)
-                .beanMapped()
+    public JpaItemWriter<Person> writer(EntityManagerFactory emf) {
+        return new JpaItemWriterBuilder<Person>()
+                .entityManagerFactory(emf)
                 .build();
     }
 
     @Bean
     public Step importStep(){
         return new StepBuilder("importPeople", jobRepository)
-                .<Person, Person>chunk(3, transactionManager)
+                .<Person, Person>chunk(100, transactionManager) // process 100 records (or rows) at a time
                 .reader(reader())
                 .processor(processor())
-                .writer(writer(dataSource))
+                .writer(writer(entityManagerFactory))
                 .build();
 
     }
