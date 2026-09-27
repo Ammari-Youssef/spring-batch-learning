@@ -1,5 +1,6 @@
-package com.youssef.batch;
+package com.youssef.batch.config;
 
+import com.youssef.batch.person.Person;
 import org.springframework.batch.item.ItemProcessor;
 
 public class PersonProcessor implements ItemProcessor<Person, Person> {

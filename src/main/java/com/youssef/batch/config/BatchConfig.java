@@ -1,5 +1,6 @@
-package com.youssef.batch;
+package com.youssef.batch.config;
 
+import com.youssef.batch.person.Person;
 import jakarta.persistence.EntityManagerFactory;
 import lombok.RequiredArgsConstructor;
 import org.springframework.batch.core.Job;
@@ -33,7 +34,7 @@ public class BatchConfig {
         reader.setName("personItemReader");
         reader.setResource(new FileSystemResource("src/main/resources/data/people.csv"));
         reader.setLinesToSkip(1); // Skip the header line that contains column names
-        reader.setLineMapper(linemapper());
+        reader.setLineMapper(lineMapper());
 
         return reader;
 
@@ -69,7 +70,7 @@ public class BatchConfig {
                 .build();
     }
 
-    private LineMapper<Person> linemapper() {
+    private LineMapper<Person> lineMapper() {
         DefaultLineMapper<Person> lineMapper = new DefaultLineMapper<>();
 
         DelimitedLineTokenizer tokenizer = new DelimitedLineTokenizer();

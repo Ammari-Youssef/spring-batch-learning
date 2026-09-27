@@ -1,4 +1,4 @@
-package com.youssef.batch;
+package com.youssef.batch.person;
 
 import jakarta.persistence.*;
 import lombok.Getter;
