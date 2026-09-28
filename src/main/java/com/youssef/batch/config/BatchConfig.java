@@ -5,6 +5,7 @@ import jakarta.persistence.EntityManagerFactory;
 import lombok.RequiredArgsConstructor;
 import org.springframework.batch.core.Job;
 import org.springframework.batch.core.Step;
+import org.springframework.batch.core.configuration.annotation.StepScope;
 import org.springframework.batch.core.job.builder.JobBuilder;
 import org.springframework.batch.core.repository.JobRepository;
 import org.springframework.batch.core.step.builder.StepBuilder;
@@ -15,6 +16,7 @@ import org.springframework.batch.item.file.LineMapper;
 import org.springframework.batch.item.file.mapping.BeanWrapperFieldSetMapper;
 import org.springframework.batch.item.file.mapping.DefaultLineMapper;
 import org.springframework.batch.item.file.transform.DelimitedLineTokenizer;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.io.FileSystemResource;
@@ -41,8 +43,9 @@ public class BatchConfig {
     }
 
     @Bean
-    public PersonProcessor processor() {
-        return new PersonProcessor();
+    @StepScope
+    public PersonProcessor processor(@Value("#{jobParameters['failAtRow']?: 0}") long failAtRow) {
+        return new PersonProcessor(failAtRow);
     }
 
     @Bean
@@ -53,12 +56,12 @@ public class BatchConfig {
     }
 
     @Bean
-    public Step importStep(){
+    public Step importStep(FlatFileItemReader<Person> reader, PersonProcessor processor, JpaItemWriter<Person> writer) {
         return new StepBuilder("importPeople", jobRepository)
                 .<Person, Person>chunk(100, transactionManager) // process 100 records (or rows) at a time
-                .reader(reader())
-                .processor(processor())
-                .writer(writer(entityManagerFactory))
+                .reader(reader)
+                .processor(processor)
+                .writer(writer)
                 .build();
 
     }
