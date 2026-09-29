@@ -19,7 +19,7 @@ spring:
     jdbc:
       initialize-schema: always
     job:
-      enabled: true
+      enabled: false
 
 # H2 embedded is auto-detected: Spring Boot configures it and auto-creates the
 # Spring Batch metadata schema (spring.batch.jdbc.initialize-schema defaults to "embedded").

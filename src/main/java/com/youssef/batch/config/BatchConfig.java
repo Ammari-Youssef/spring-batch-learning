@@ -31,6 +31,7 @@ public class BatchConfig {
     private final EntityManagerFactory entityManagerFactory;
 
     @Bean
+    @StepScope
     public FlatFileItemReader<Person> reader() {
         FlatFileItemReader<Person> reader = new FlatFileItemReader<>();
         reader.setName("personItemReader");
