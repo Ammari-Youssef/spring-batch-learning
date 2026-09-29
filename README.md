@@ -22,10 +22,29 @@ verifiable demo.
 | M2 | JPA writer | JPA entity + `JpaItemWriter`, auto DDL | `./mvnw spring-boot:run` |
 | M3 | job parameters | `JobParameters` from CLI, `@StepScope` + late binding (`@Value("#{jobParameters['failAtRow']}")`), failure injection, chunk rollback | `./mvnw spring-boot:run "-Dspring-boot.run.arguments=failAtRow=5000"` |
 | M4 | on-demand launch + restart | `JobLauncher` controller, `JobInstance` identity, restart semantics, `@StepScope` reader for resume | see [Restart demo](#restart-demo) |
+| M5 | async launch | `TaskExecutor` bean with `@BatchTaskExecutor` qualifier, POST returns instantly (202), job runs on its own thread | POST `localhost:8080/api/jobs?failAtRow=5000` |
 
 > Note: in M3 the job auto-runs at startup and takes the `failAtRow` parameter from
 > the command line (no `--` prefix). Since M4 the job only runs when POSTed
 > (`job.enabled: false`).
+
+### Async launch (M5)
+
+By default the `JobLauncher` runs synchronously on the caller's thread (the HTTP
+request). Giving it a `@BatchTaskExecutor`-qualified `TaskExecutor` bean makes each
+launch run on its own `batch-1, batch-2, ...` thread:
+
+- The POST answers immediately with `202 Accepted`, the execution id, and status
+  `STARTING`/`STARTED` — the job keeps running afterwards.
+- A re-POST while it is still running → `409 Job already running`.
+- Once it reaches `COMPLETED`, a re-POST → `409 Job already complete` (same instance).
+- A launch that fails at `failAtRow=5000` still fails in the background… and the same URL re-POSTed
+  picks up the resume — all as in M4, just off the request thread.
+
+Gotchas that make this non-trivial: Boot only picks up a TaskExecutor **qualified**
+with `@BatchTaskExecutor` for its `TaskExecutorJobLauncher` (else it silently stays
+synchronous), and the bean must live in its own dependency-free `@Configuration`
+(`AsyncConfig.java`) to avoid a circular dependency with `BatchConfig`.
 
 ## Restart demo (M4)
 
@@ -70,6 +89,7 @@ fails exactly there.
 src/main/java/com/youssef/batch/
 ├── BatchApplication.java       # Spring Boot entry point
 ├── config/                     # batch wiring
+│   ├── AsyncConfig.java        # @BatchTaskExecutor TaskExecutor (async launches)
 │   ├── BatchConfig.java        # Job / Step / reader / processor / writer beans
 │   └── PersonProcessor.java    # transformation + failAtRow failure injection
 └── person/
@@ -83,7 +103,6 @@ src/main/resources/
 
 ## What's next
 
-- Async launch (give the `JobLauncher` a `TaskExecutor`) so a POST returns instantly
 - Skip & retry for transient errors
 - Scheduling (run jobs on a timer)
 - Move to Postgres so job history survives app restarts
