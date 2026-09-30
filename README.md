@@ -23,6 +23,7 @@ verifiable demo.
 | M3 | job parameters | `JobParameters` from CLI, `@StepScope` + late binding (`@Value("#{jobParameters['failAtRow']}")`), failure injection, chunk rollback | `./mvnw spring-boot:run "-Dspring-boot.run.arguments=failAtRow=5000"` |
 | M4 | on-demand launch + restart | `JobLauncher` controller, `JobInstance` identity, restart semantics, `@StepScope` reader for resume | see [Restart demo](#restart-demo) |
 | M5 | async launch | `TaskExecutor` bean with `@BatchTaskExecutor` qualifier, POST returns instantly (202), job runs on its own thread | POST `localhost:8080/api/jobs?failAtRow=5000` |
+| M6 | skip & retry | `faultTolerant()`, `.skip()/.skipLimit()`, `.retry()/.retryLimit()`, skip/retry counters in the metadata | see [Skip & retry demo](#skip--retry-demo) |
 
 > Note: in M3 the job auto-runs at startup and takes the `failAtRow` parameter from
 > the command line (no `--` prefix). Since M4 the job only runs when POSTed
@@ -76,6 +77,83 @@ With `failAtRow=5000` and `chunk(100)`: row 5000 is the last row of chunk #50
 (4901–5000); the whole chunk rolls back, so only 4900 rows persist on a run that
 fails exactly there.
 
+## Skip & retry demo (M6)
+
+Before M6 any exception killed the job. A real job meets garbage rows and flaky
+databases, so the step is made **fault tolerant** (`BatchConfig.importStep`):
+
+```java
+.faultTolerant()
+.skipLimit(10)                        // give up after 10 skipped items
+.skip(IllegalArgumentException.class) // bad records -> drop that item, keep going
+.retry(CannotAcquireLockException.class) // transient DB error -> re-try the chunk
+.retryLimit(3)                       // give up after 3 attempts
+```
+
+Two different ideas, two different parameters:
+
+- **skip** = *this item is bad, never going to work.* Drop it, keep the rest.
+- **retry** = *this failure may be temporary.* Re-run the whole chunk and hope it
+  succeeds next time.
+
+Skip and retry both work by **rolling the chunk back and re-processing it** — for a
+skip the offending item is excluded on the second pass, for a retry it is processed
+normally. So neither produces duplicate rows, and neither is free (extra reads +
+rollbacks).
+
+### Skip demo — bad records in the file
+
+`skipEvery=N` makes the processor throw on every Nth row (a malformed record).
+
+```bash
+POST localhost:8080/api/jobs?failAtRow=0&skipEvery=1000   # 10 bad rows -> COMPLETED, 9990 rows
+POST localhost:8080/api/jobs?failAtRow=0&skipEvery=100    # 1000 bad rows -> FAILED at skip limit
+```
+
+The limit is the whole point:
+
+| `skipEvery` | bad rows | outcome | rows in DB |
+|---|---|---|---|
+| 1000 | 10 | COMPLETED (limit not exceeded) | 9990 |
+| 10 | 100 | FAILED inside chunk 2 | 90 |
+| 2 | 5000 | FAILED inside chunk 1 | 0 |
+
+Note the third row: the job dies **in the first chunk** because the 11th bad row
+appears at row 22, so nothing ever commits. `skipEvery=2` is a good reminder that
+skip is *tolerance*, not filtering — if half your data is bad you want the job to
+fail, not to quietly persist half of it. To genuinely drop rows, return `null` from
+the processor (counted as `FILTER_COUNT`).
+
+### Retry demo — flaky database
+
+`FlakyWriter` wraps the real `JpaItemWriter` and throws `CannotAcquireLockException`
+("row locked by another transaction") on the first `flakyWrites` write calls, then
+behaves normally. It simulates a transient DB failure that a retry can fix.
+
+```bash
+POST localhost:8080/api/jobs?failAtRow=0&skipEvery=0&flakyWrites=2  # COMPLETED, 10000 rows
+POST localhost:8080/api/jobs?failAtRow=0&skipEvery=0&flakyWrites=5  # FAILED, retryLimit exceeded
+```
+
+Verify in H2 (`http://localhost:8080/h2-console`):
+
+```sql
+-- skip counters (PROCESS_SKIP = bad rows dropped by the processor)
+SELECT STEP_EXECUTION_ID, READ_COUNT, WRITE_COUNT, PROCESS_SKIP_COUNT, ROLLBACK_COUNT, STATUS
+FROM BATCH_STEP_EXECUTION ORDER BY STEP_EXECUTION_ID;
+-- retried chunks roll back and are re-read, so READ_COUNT can exceed the row count
+SELECT COUNT(*) AS PERSISTED_ROWS FROM people;
+```
+
+Run with `--logging.level.org.springframework.batch.core=DEBUG` to watch it happen:
+`SimpleRetryExceptionHandler: Handled non-fatal exception` for retries,
+`Rollback for ... Skipped at row N` for skips.
+
+**Rule of thumb:** retry *transient* problems (locks, timeouts, network blips); never
+retry a permanent business error — it will just burn attempts. And never `skip` a
+**writer** exception (the chunk may already be part-committed); skip is for
+reader/processor faults.
+
 ## Getting started
 
 ```bash
@@ -91,10 +169,11 @@ src/main/java/com/youssef/batch/
 ├── config/                     # batch wiring
 │   ├── AsyncConfig.java        # @BatchTaskExecutor TaskExecutor (async launches)
 │   ├── BatchConfig.java        # Job / Step / reader / processor / writer beans
-│   └── PersonProcessor.java    # transformation + failAtRow failure injection
+│   ├── FlakyWriter.java        # wraps JpaItemWriter, fails transiently (retry demo)
+│   └── PersonProcessor.java    # transformation + failAtRow / skipEvery injection
 └── person/
     ├── Person.java             # JPA entity
-    └── PersonController.java   # POST /api/jobs?fileName=&failAtRow=  (job launcher)
+    └── PersonController.java   # POST /api/jobs?fileName=&failAtRow=&skipEvery=&flakyWrites=
 
 src/main/resources/
 ├── application.yml             # H2 + JPA + batch config
@@ -103,7 +182,6 @@ src/main/resources/
 
 ## What's next
 
-- Skip & retry for transient errors
 - Scheduling (run jobs on a timer)
 - Move to Postgres so job history survives app restarts
 
