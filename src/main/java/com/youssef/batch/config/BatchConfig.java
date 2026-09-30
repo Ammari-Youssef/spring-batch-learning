@@ -20,6 +20,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.io.FileSystemResource;
+import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.transaction.PlatformTransactionManager;
 
 @Configuration
@@ -45,8 +46,11 @@ public class BatchConfig {
 
     @Bean
     @StepScope
-    public PersonProcessor processor(@Value("#{jobParameters['failAtRow']?: 0}") long failAtRow) {
-        return new PersonProcessor(failAtRow);
+    public PersonProcessor processor(
+            @Value("#{jobParameters['failAtRow']?: 0}") long failAtRow,
+            @Value("#{jobParameters['skipEvery']?: 0}") long skipEvery
+    ) {
+        return new PersonProcessor(failAtRow, skipEvery);
     }
 
     @Bean
@@ -57,12 +61,26 @@ public class BatchConfig {
     }
 
     @Bean
-    public Step importStep(FlatFileItemReader<Person> reader, PersonProcessor processor, JpaItemWriter<Person> writer) {
+    @StepScope
+    public FlakyWriter flakyWriter(EntityManagerFactory emf,
+            @Value("#{jobParameters['flakyWrites']?: 0}") long flakyWrites) {
+        return new FlakyWriter(emf, flakyWrites);
+    }
+
+    @Bean
+    public Step importStep(FlatFileItemReader<Person> reader, PersonProcessor processor, FlakyWriter flakyWriter) {
         return new StepBuilder("importPeople", jobRepository)
                 .<Person, Person>chunk(100, transactionManager) // process 100 records (or rows) at a time
                 .reader(reader)
                 .processor(processor)
-                .writer(writer)
+                .writer(flakyWriter)
+
+                .faultTolerant() // unlocks skip / retry for this step
+                .skipLimit(10) // max items to skip before failing the step
+                .skip(IllegalArgumentException.class) // bad rows (from the processor) are dropped
+                .retry(CannotAcquireLockException.class) // transient DB errors are re-attempted
+                .retryLimit(3) // max re-attempts per chunk before failing
+
                 .build();
 
     }

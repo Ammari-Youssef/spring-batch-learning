@@ -1,2 +1,2 @@
 ###
-POST localhost:8080/api/jobs?failAtRow=5000
+POST localhost:8080/api/jobs?failAtRow=0&skipEvery=1000&flakyWrites=2

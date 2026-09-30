@@ -29,11 +29,16 @@ public class PersonController {
     @PostMapping
     public ResponseEntity<String> runJob(
             @RequestParam(defaultValue = "people.csv") String fileName,
-            @RequestParam(defaultValue = "0") int failAtRow) {
+            @RequestParam(defaultValue = "0") long failAtRow,
+            @RequestParam(defaultValue = "0") long skipEvery,
+            @RequestParam(defaultValue = "0") long flakyWrites
+    ) {
 
         JobParameters jobParameters = new JobParametersBuilder()
                 .addString("fileName", fileName)
-                .addLong("failAtRow", (long) failAtRow)
+                .addLong("failAtRow", failAtRow)
+                .addLong("skipEvery", skipEvery)
+                .addLong("flakyWrites", flakyWrites)
                 .toJobParameters();
 
         try {

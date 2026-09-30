@@ -9,6 +9,7 @@ import org.springframework.batch.item.ItemProcessor;
 public class PersonProcessor implements ItemProcessor<Person, Person> {
 
     private final long failAtRow;
+    private final long skipEvery; // Set to a positive number to skip every Nth row
     private long count = 0;
 
     @Override
@@ -18,6 +19,11 @@ public class PersonProcessor implements ItemProcessor<Person, Person> {
         if(failAtRow == count && failAtRow > 0) {
             throw new RuntimeException("Failing at row " + count);
         }
+
+        if (skipEvery > 0 && count % skipEvery == 0) {
+            throw new IllegalArgumentException("Skipped at row " + count);
+        }
+
         person.setName(person.getName().trim().toUpperCase());
         person.setCity(person.getCity().trim());
         return person;
