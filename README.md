@@ -24,6 +24,7 @@ verifiable demo.
 | M4 | on-demand launch + restart | `JobLauncher` controller, `JobInstance` identity, restart semantics, `@StepScope` reader for resume | see [Restart demo](#restart-demo) |
 | M5 | async launch | `TaskExecutor` bean with `@BatchTaskExecutor` qualifier, POST returns instantly (202), job runs on its own thread | POST `localhost:8080/api/jobs?failAtRow=5000` |
 | M6 | skip & retry | `faultTolerant()`, `.skip()/.skipLimit()`, `.retry()/.retryLimit()`, skip/retry counters in the metadata | see [Skip & retry demo](#skip--retry-demo) |
+| M7 | scheduling + status | `@EnableScheduling` + `@Scheduled(cron)`, `JobExplorer` status endpoint | set `batch.import.cron`, then `./mvnw spring-boot:run` |
 
 > Note: in M3 the job auto-runs at startup and takes the `failAtRow` parameter from
 > the command line (no `--` prefix). Since M4 the job only runs when POSTed
@@ -154,6 +155,57 @@ retry a permanent business error — it will just burn attempts. And never `skip
 **writer** exception (the chunk may already be part-committed); skip is for
 reader/processor faults.
 
+## Scheduling (M7)
+
+Until M7 the job only ever ran because you POSTed it. `ScheduleConfig` launches it
+on a timer instead, so a real import happens without anyone watching:
+
+```java
+@Scheduled(cron = "${batch.import.cron}")
+public void runImport() {
+    jobLauncher.run(peopleJob, new JobParametersBuilder()
+            .addString("fileName", "people.csv")
+            .addLong("run.id", System.currentTimeMillis())
+            .toJobParameters());
+}
+```
+
+The cron lives in `application.yml` (`batch.import.cron`). Note it is **6 fields**,
+not 5 — Spring adds seconds: `sec min hour dom mon dow`. Useful test values:
+
+| cron | meaning |
+|---|---|
+| `"*/5 * * * * *"` | every 5 seconds (fastest way to see it fire) |
+| `"0 * * * * *"` | every minute |
+| `"0 0 2 * * *"` | 02:00:00 daily (the committed value) |
+
+### The parameter lesson (this is why `run.id` exists)
+
+`run.id` is a **timestamp**, so each night is a *new* `JobInstance` and the job really
+runs. Change it to a fixed value:
+
+```java
+.addLong("run.id", 1L)   // one instance, ever
+```
+
+…and the first fire imports, while every fire after that throws
+`JobInstanceAlreadyCompleteException` — the scheduler being refused because that
+instance is already `COMPLETED`. Same rule as M4, just applied to a timer: **the
+parameters decide the identity, and a fixed set means "run once".**
+
+Because those exceptions are checked, the launcher is wrapped in a try/catch. Letting
+them escape a `@Scheduled` method is a real bug — Spring's scheduler will log the
+stack trace every time it fires.
+
+### Checking a run without the H2 console
+
+```bash
+curl localhost:8080/api/jobs/1
+```
+
+`GET /api/jobs/{executionId}` looks the execution up through `JobExplorer`, so you can
+read the status of a scheduled *or* POSTed run without opening SQL.
+
 ## Getting started
 
 ```bash
@@ -170,10 +222,11 @@ src/main/java/com/youssef/batch/
 │   ├── AsyncConfig.java        # @BatchTaskExecutor TaskExecutor (async launches)
 │   ├── BatchConfig.java        # Job / Step / reader / processor / writer beans
 │   ├── FlakyWriter.java        # wraps JpaItemWriter, fails transiently (retry demo)
-│   └── PersonProcessor.java    # transformation + failAtRow / skipEvery injection
+│   ├── PersonProcessor.java    # transformation + failAtRow / skipEvery injection
+│   └── ScheduleConfig.java     # @Scheduled cron launch of peopleJob
 └── person/
     ├── Person.java             # JPA entity
-    └── PersonController.java   # POST /api/jobs?fileName=&failAtRow=&skipEvery=&flakyWrites=
+    └── PersonController.java   # POST /api/jobs (launch) + GET /api/jobs/{id} (status)
 
 src/main/resources/
 ├── application.yml             # H2 + JPA + batch config
@@ -182,8 +235,8 @@ src/main/resources/
 
 ## What's next
 
-- Scheduling (run jobs on a timer)
-- Move to Postgres so job history survives app restarts
+- Move to Postgres so job history survives app restarts (config-only change —
+  H2 is in-memory, so every restart currently wipes the job tables)
 
 ## Author
 
