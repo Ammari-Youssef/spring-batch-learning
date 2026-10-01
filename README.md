@@ -10,22 +10,22 @@ This project simulates a common enterprise data ingestion workload: importing la
 
 Batch processing remains fundamental in modern enterprise systems because:
 
-- **Data integrity at scale** — Moves and transforms large datasets reliably without impacting online transaction systems.
-- **Operational resilience** — Runs unattended (often overnight), tolerates bad records and transient errors, and restarts safely after failure.
-- **Auditability and control** — Provides clear execution tracking and traceable job history for compliance and operations teams.
-- **Resource efficiency** — Processes data in chunks to control memory usage and keep transaction scope predictable.
-- **Automation and predictability** — Enables scheduled, repeatable workflows critical to business processes.
+- **Data integrity at scale** : Moves and transforms large datasets reliably without impacting online transaction systems.
+- **Operational resilience** : Runs unattended (often overnight), tolerates bad records and transient errors, and restarts safely after failure.
+- **Auditability and control** : Provides clear execution tracking and traceable job history for compliance and operations teams.
+- **Resource efficiency** : Processes data in chunks to control memory usage and keep transaction scope predictable.
+- **Automation and predictability** : Enables scheduled, repeatable workflows critical to business processes.
 
 ## Key technical contributions
 
 I designed and implemented this end-to-end batch pipeline, with a focus on reliability, fault tolerance, and operational control:
 
-- **End-to-end design & implementation** — Architected the solution incrementally across seven milestones (M1–M7), implementing each capability in isolation with clean, verifiable commits to ensure traceable progress.
-- **Fault tolerance strategy** — Configured `faultTolerant()` with `.skip()`/`.skipLimit()` to isolate and drop malformed records, and `.retry()`/`.retryLimit()` to recover from transient write failures. Developed a deterministic `FlakyWriter` to exercise and verify retry behavior in a controlled, repeatable manner.
-- **Reliability & restartability** — Enforced correct `JobInstance` identity and stable job parameters, leveraged `@StepScope` to preserve reader state, and implemented resume-from-last-committed-chunk semantics to avoid data reprocessing or duplication after failures.
-- **Asynchronous execution** — Configured a `@BatchTaskExecutor`-qualified `TaskExecutor` so long-running jobs return immediately (`202 Accepted`) and execute on isolated background threads.
-- **Scheduling & operational control** — Implemented cron-based execution via `@EnableScheduling`/`@Scheduled`, with a `JobExplorer`-backed `GET /api/jobs/{executionId}` status endpoint for on-demand inspection without requiring direct database access.
-- **Verification discipline** — Validated behavior against Spring Batch metadata tables (read/write/skip counts, rollbacks, and execution statuses) to prove correctness of restart, skip, and retry semantics.
+- **End-to-end design & implementation** : Architected the solution incrementally across seven milestones (M1-M7), implementing each capability in isolation with clean, verifiable commits to ensure traceable progress.
+- **Fault tolerance strategy** : Configured `faultTolerant()` with `.skip()`/`.skipLimit()` to isolate and drop malformed records, and `.retry()`/`.retryLimit()` to recover from transient write failures. Developed a deterministic `FlakyWriter` to exercise and verify retry behavior in a controlled, repeatable manner.
+- **Reliability & restartability** : Enforced correct `JobInstance` identity and stable job parameters, leveraged `@StepScope` to preserve reader state, and implemented resume-from-last-committed-chunk semantics to avoid data reprocessing or duplication after failures.
+- **Asynchronous execution** : Configured a `@BatchTaskExecutor`-qualified `TaskExecutor` so long-running jobs return immediately (`202 Accepted`) and execute on isolated background threads.
+- **Scheduling & operational control** : Implemented cron-based execution via `@EnableScheduling`/`@Scheduled`, with a `JobExplorer`-backed `GET /api/jobs/{executionId}` status endpoint for on-demand inspection without requiring direct database access.
+- **Verification discipline** : Validated behavior against Spring Batch metadata tables (read/write/skip counts, rollbacks, and execution statuses) to prove correctness of restart, skip, and retry semantics.
 
 ## Tech stack summary
 
@@ -33,7 +33,7 @@ I designed and implemented this end-to-end batch pipeline, with a focus on relia
 - **Spring Boot 3.5.16**
 - **Spring Batch 5** (chunk-oriented processing, job repository, restart semantics)
 - **Spring Data JPA** (`JpaItemWriter`)
-- **H2** (embedded, in-memory) — zero-setup DB with Spring Batch metadata schema
+- **H2** (embedded, in-memory) : zero-setup DB with Spring Batch metadata schema
 - **Lombok** (`@RequiredArgsConstructor`, `@Getter`/`@Setter`)
 - **Springdoc OpenAPI** + DevTools
 
@@ -51,10 +51,10 @@ I designed and implemented this end-to-end batch pipeline, with a focus on relia
 
 ## Key outcomes / impact
 
-- **Reliability** — Restartable batch execution with no data loss or duplication; resume-from-last-committed-chunk behavior verified through step execution metrics.
-- **Scalability** — Chunk-based processing with bounded async concurrency for predictable memory usage and controlled throughput.
-- **Error handling** — Configurable skip/retry limits isolate malformed records and absorb transient infrastructure failures without aborting entire jobs. Async launches return explicit HTTP semantics (`202 Accepted`) with clear mappings for already-running/completed/restart cases.
-- **Operational readiness** — Supports both on-demand and scheduled execution, with status inspection via a dedicated endpoint, backed by auditable Spring Batch metadata.
+- **Reliability** : Restartable batch execution with no data loss or duplication; resume-from-last-committed-chunk behavior verified through step execution metrics.
+- **Scalability** : Chunk-based processing with bounded async concurrency for predictable memory usage and controlled throughput.
+- **Error handling** : Configurable skip/retry limits isolate malformed records and absorb transient infrastructure failures without aborting entire jobs. Async launches return explicit HTTP semantics (`202 Accepted`) with clear mappings for already-running/completed/restart cases.
+- **Operational readiness** : Supports both on-demand and scheduled execution, with status inspection via a dedicated endpoint, backed by auditable Spring Batch metadata.
 
 ## Milestones
 
@@ -99,7 +99,7 @@ SELECT COUNT(*) AS PERSISTED_ROWS FROM people;
 ```
 
 With `failAtRow=5000` and `chunk(100)`: row 5000 is the last row of chunk #50
-(4901–5000); the whole chunk rolls back, so only 4900 rows persist on a run that
+(4901-5000); the whole chunk rolls back, so only 4900 rows persist on a run that
 fails exactly there.
 
 ## Skip & retry demo (M6)
@@ -121,12 +121,12 @@ Two different ideas, two different parameters:
 - **retry** = *this failure may be temporary.* Re-run the whole chunk and hope it
   succeeds next time.
 
-Skip and retry both work by **rolling the chunk back and re-processing it** — for a
+Skip and retry both work by **rolling the chunk back and re-processing it** : for a
 skip the offending item is excluded on the second pass, for a retry it is processed
 normally. So neither produces duplicate rows, and neither is free (extra reads +
 rollbacks).
 
-### Skip demo — bad records in the file
+### Skip demo bad records in the file
 
 `skipEvery=N` makes the processor throw on every Nth row (a malformed record).
 
@@ -145,11 +145,11 @@ The limit is the whole point:
 
 Note the third row: the job dies **in the first chunk** because the 11th bad row
 appears at row 22, so nothing ever commits. `skipEvery=2` is a good reminder that
-skip is *tolerance*, not filtering — if half your data is bad you want the job to
+skip is *tolerance*, not filtering : if half your data is bad you want the job to
 fail, not to quietly persist half of it. To genuinely drop rows, return `null` from
 the processor (counted as `FILTER_COUNT`).
 
-### Retry demo — flaky database
+### Retry demo flaky database
 
 `FlakyWriter` wraps the real `JpaItemWriter` and throws `CannotAcquireLockException`
 ("row locked by another transaction") on the first `flakyWrites` write calls, then
@@ -175,7 +175,7 @@ Run with `--logging.level.org.springframework.batch.core=DEBUG` to watch it happ
 `Rollback for ... Skipped at row N` for skips.
 
 **Rule of thumb:** retry *transient* problems (locks, timeouts, network blips); never
-retry a permanent business error — it will just burn attempts. And never `skip` a
+retry a permanent business error it will just burn attempts. And never `skip` a
 **writer** exception (the chunk may already be part-committed); skip is for
 reader/processor faults.
 
@@ -195,7 +195,7 @@ public void runImport() {
 ```
 
 The cron lives in `application.yml` (`batch.import.cron`). Note it is **6 fields**,
-not 5 — Spring adds seconds: `sec min hour dom mon dow`. Useful test values:
+not 5 : Spring adds seconds: `sec min hour dom mon dow`. Useful test values:
 
 | cron | meaning |
 |---|---|
@@ -213,12 +213,12 @@ runs. Change it to a fixed value:
 ```
 
 …and the first fire imports, while every fire after that throws
-`JobInstanceAlreadyCompleteException` — the scheduler being refused because that
+`JobInstanceAlreadyCompleteException` : the scheduler being refused because that
 instance is already `COMPLETED`. Same rule as M4, just applied to a timer: **the
 parameters decide the identity, and a fixed set means "run once".**
 
 Because those exceptions are checked, the launcher is wrapped in a try/catch. Letting
-them escape a `@Scheduled` method is a real bug — Spring's scheduler will log the
+them escape a `@Scheduled` method is a real bug Spring's scheduler will log the
 stack trace every time it fires.
 
 ### Checking a run without the H2 console
