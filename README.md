@@ -1,25 +1,60 @@
-# Spring Batch — Chunked Processing, Restart, Skip/Retry & Scheduling
+# Spring Batch — Reliable Data Processing Pipeline
 
-A reference implementation of reliable, fault-tolerant batch processing with **Spring Batch 5** and **Spring Boot 3.5.16**. Built incrementally across seven milestones, it demonstrates production-relevant patterns with concrete, verifiable, and runnable demos.
+A production-grade reference implementation of a robust batch processing system using **Spring Batch 5** and **Spring Boot 3.5.16**. It ingests 10,000 CSV records, transforms and validates them, persists to a structured database, and demonstrates enterprise-grade patterns for reliability, fault tolerance, scalability, and operational control.
 
-## What it demonstrates
+## Project description
 
-- **Chunk-oriented processing** – CSV ingestion with `FlatFileItemReader`, domain transformation in an `ItemProcessor`, and persistence via `JpaItemWriter` with proper transaction boundaries
-- **Reliability & restartability** – Correct `JobInstance` identity, `@StepScope` reader state, and resume-from-last-committed-chunk semantics after a failed execution
-- **Resilience & fault tolerance** – `faultTolerant()` with `.skip()`/`.skipLimit()` to drop bad records and `.retry()`/`.retryLimit()` to recover from transient failures without data loss
-- **Asynchronous execution** – Offloads job launches to background threads via a `@BatchTaskExecutor`-qualified `TaskExecutor` so REST calls return `202 Accepted` immediately
-- **Scheduling** – Cron-based execution with `@EnableScheduling`/`@Scheduled`, plus a `JobExplorer`-backed status endpoint for inspection
-- **Operational observability** – Leverages Spring Batch metadata tables to prove restart, skip, retry and execution state in practice
+This project simulates a common enterprise data ingestion workload: importing large, potentially messy CSV files into a database while guaranteeing correctness even in the presence of failures. It matters because batch jobs power critical off-hours processes (billing, reconciliation, reporting, ETL, and data warehousing), where partial failures, unexpected restarts, or transient infrastructure hiccups can lead to data loss, duplication, or missed SLAs. This implementation is designed to be resilient, auditable, and operable in real-world conditions.
 
-## Tech stack
+## Business relevance
 
-- Java 17 + Maven wrapper
-- Spring Boot 3.5.16
-- Spring Batch (chunk-oriented jobs)
-- Spring Data JPA (`JpaItemWriter`)
-- H2 (embedded, in-memory) — zero-setup DB, includes the Spring Batch metadata schema
-- Lombok (`@RequiredArgsConstructor`, `@Getter`/`@Setter`)
-- Springdoc OpenAPI + DevTools
+Batch processing remains fundamental in modern enterprise systems because:
+
+- **Data integrity at scale** — Moves and transforms large datasets reliably without impacting online transaction systems.
+- **Operational resilience** — Runs unattended (often overnight), tolerates bad records and transient errors, and restarts safely after failure.
+- **Auditability and control** — Provides clear execution tracking and traceable job history for compliance and operations teams.
+- **Resource efficiency** — Processes data in chunks to control memory usage and keep transaction scope predictable.
+- **Automation and predictability** — Enables scheduled, repeatable workflows critical to business processes.
+
+## My role and key technical contributions
+
+I designed and implemented this end-to-end batch pipeline, with a focus on reliability, fault tolerance, and operational control:
+
+- **End-to-end design & implementation** — Architected the solution incrementally across seven milestones (M1–M7), implementing each capability in isolation with clean, verifiable commits to ensure traceable progress.
+- **Fault tolerance strategy** — Configured `faultTolerant()` with `.skip()`/`.skipLimit()` to isolate and drop malformed records, and `.retry()`/`.retryLimit()` to recover from transient write failures. Developed a deterministic `FlakyWriter` to exercise and verify retry behavior in a controlled, repeatable manner.
+- **Reliability & restartability** — Enforced correct `JobInstance` identity and stable job parameters, leveraged `@StepScope` to preserve reader state, and implemented resume-from-last-committed-chunk semantics to avoid data reprocessing or duplication after failures.
+- **Asynchronous execution** — Configured a `@BatchTaskExecutor`-qualified `TaskExecutor` so long-running jobs return immediately (`202 Accepted`) and execute on isolated background threads.
+- **Scheduling & operational control** — Implemented cron-based execution via `@EnableScheduling`/`@Scheduled`, with a `JobExplorer`-backed `GET /api/jobs/{executionId}` status endpoint for on-demand inspection without requiring direct database access.
+- **Verification discipline** — Validated behavior against Spring Batch metadata tables (read/write/skip counts, rollbacks, and execution statuses) to prove correctness of restart, skip, and retry semantics.
+
+## Tech stack summary
+
+- **Java 17** + Maven wrapper
+- **Spring Boot 3.5.16**
+- **Spring Batch 5** (chunk-oriented processing, job repository, restart semantics)
+- **Spring Data JPA** (`JpaItemWriter`)
+- **H2** (embedded, in-memory) — zero-setup DB with Spring Batch metadata schema
+- **Lombok** (`@RequiredArgsConstructor`, `@Getter`/`@Setter`)
+- **Springdoc OpenAPI** + DevTools
+
+## Architecture overview
+
+**CSV → Reader → Processor → Writer → DB**
+
+| Layer | Component | Purpose |
+|---|---|---|
+| Source | `people.csv` (10,001 lines: header + 10,000 rows) | Input dataset |
+| Reader | `FlatFileItemReader<Person>` (`@StepScope`) | Reads lines, skips the header, and maps CSV rows to domain objects |
+| Processor | `PersonProcessor` (`@StepScope`) | Transforms data (trim/uppercase), supports failure injection (`failAtRow`), and drops bad records (`skipEvery`) via controlled exceptions |
+| Writer | `JpaItemWriter<Person>` (wrapped by `FlakyWriter` for retry demos) | Persists each chunk to the database in a single transaction to maintain consistency |
+| Orchestration | `Job`/`Step`, `JobLauncher`, `JobExplorer`, `TaskExecutor`, `@Scheduled` | Controls launch (on-demand, async, and cron), restart semantics, execution status, and fault tolerance |
+
+## Key outcomes / impact
+
+- **Reliability** — Restartable batch execution with no data loss or duplication; resume-from-last-committed-chunk behavior verified through step execution metrics.
+- **Scalability** — Chunk-based processing with bounded async concurrency for predictable memory usage and controlled throughput.
+- **Error handling** — Configurable skip/retry limits isolate malformed records and absorb transient infrastructure failures without aborting entire jobs. Async launches return explicit HTTP semantics (`202 Accepted`) with clear mappings for already-running/completed/restart cases.
+- **Operational readiness** — Supports both on-demand and scheduled execution, with status inspection via a dedicated endpoint, backed by auditable Spring Batch metadata.
 
 ## Milestones
 
@@ -36,24 +71,6 @@ A reference implementation of reliable, fault-tolerant batch processing with **S
 > Note: in M3 the job auto-runs at startup and takes the `failAtRow` parameter from
 > the command line (no `--` prefix). Since M4 the job only runs when POSTed
 > (`job.enabled: false`).
-
-### Async launch (M5)
-
-By default the `JobLauncher` runs synchronously on the caller's thread (the HTTP
-request). Giving it a `@BatchTaskExecutor`-qualified `TaskExecutor` bean makes each
-launch run on its own `batch-1, batch-2, ...` thread:
-
-- The POST answers immediately with `202 Accepted`, the execution id, and status
-  `STARTING`/`STARTED` — the job keeps running afterwards.
-- A re-POST while it is still running → `409 Job already running`.
-- Once it reaches `COMPLETED`, a re-POST → `409 Job already complete` (same instance).
-- A launch that fails at `failAtRow=5000` still fails in the background… and the same URL re-POSTed
-  picks up the resume — all as in M4, just off the request thread.
-
-Gotchas that make this non-trivial: Boot only picks up a TaskExecutor **qualified**
-with `@BatchTaskExecutor` for its `TaskExecutorJobLauncher` (else it silently stays
-synchronous), and the bean must live in its own dependency-free `@Configuration`
-(`AsyncConfig.java`) to avoid a circular dependency with `BatchConfig`.
 
 ## Restart demo (M4)
 
@@ -213,12 +230,14 @@ curl localhost:8080/api/jobs/1
 `GET /api/jobs/{executionId}` looks the execution up through `JobExplorer`, so you can
 read the status of a scheduled *or* POSTed run without opening SQL.
 
-## Getting started
+## Usage / how to run
 
 ```bash
-./mvnw test                 # runs the app + job (context test)
-./mvnw spring-boot:run      # start the app
+./mvnw test                 # runs context tests
+./mvnw spring-boot:run      # starts app (cron disabled by default)
 ```
+
+Launch on-demand: `POST localhost:8080/api/jobs?failAtRow=0&skipEvery=0&flakyWrites=0` (see `demo.http` for examples). Check status: `GET /api/jobs/{executionId}`.
 
 ## Project layout
 
@@ -239,11 +258,6 @@ src/main/resources/
 ├── application.yml             # H2 + JPA + batch config
 └── data/people.csv             # 10,000 rows: name,age,city
 ```
-
-## What's next
-
-- Move to Postgres so job history survives app restarts (config-only change —
-  H2 is in-memory, so every restart currently wipes the job tables)
 
 ## Author
 
