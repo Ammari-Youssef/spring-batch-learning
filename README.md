@@ -1,6 +1,6 @@
-# Spring Batch — Reliable Data Processing Pipeline
+# Spring Batch Learning
 
-A production-grade reference implementation of a robust batch processing system using **Spring Batch 5** and **Spring Boot 3.5.16**. It ingests 10,000 CSV records, transforms and validates them, persists to a structured database, and demonstrates enterprise-grade patterns for reliability, fault tolerance, scalability, and operational control.
+A hands-on Spring Batch project built while learning Spring Batch 5 with Spring Boot 3.5.16. It ingests 10,000 CSV records, applies basic transformations, persists them to a database, and explores core batch concepts like restart, skip/retry, async execution, and scheduling.
 
 ## Project description
 
@@ -16,7 +16,7 @@ Batch processing remains fundamental in modern enterprise systems because:
 - **Resource efficiency** — Processes data in chunks to control memory usage and keep transaction scope predictable.
 - **Automation and predictability** — Enables scheduled, repeatable workflows critical to business processes.
 
-## My role and key technical contributions
+## Key technical contributions
 
 I designed and implemented this end-to-end batch pipeline, with a focus on reliability, fault tolerance, and operational control:
 
