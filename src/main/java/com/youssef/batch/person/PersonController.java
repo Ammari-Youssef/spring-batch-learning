@@ -6,16 +6,14 @@ import org.springframework.batch.core.JobExecution;
 import org.springframework.batch.core.JobParameters;
 import org.springframework.batch.core.JobParametersBuilder;
 import org.springframework.batch.core.JobParametersInvalidException;
+import org.springframework.batch.core.explore.JobExplorer;
 import org.springframework.batch.core.launch.JobLauncher;
 import org.springframework.batch.core.repository.JobExecutionAlreadyRunningException;
 import org.springframework.batch.core.repository.JobInstanceAlreadyCompleteException;
 import org.springframework.batch.core.repository.JobRestartException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/jobs")
@@ -24,6 +22,16 @@ public class PersonController {
 
     private final JobLauncher jobLauncher;
     private final Job peopleJob;
+    private final JobExplorer jobExplorer;
+
+    @GetMapping("/{executionId}")
+    public ResponseEntity<?> status(@PathVariable long executionId) {
+        JobExecution execution = jobExplorer.getJobExecution(executionId);
+
+        if (execution == null) return ResponseEntity.notFound().build();
+
+        return ResponseEntity.ok( " execution details: " + execution.toString());
+    }
 
 
     @PostMapping
