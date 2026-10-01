@@ -1,8 +1,15 @@
-# spring-batch-learning
+# Spring Batch — Chunked Processing, Restart, Skip/Retry & Scheduling
 
-A hands-on repo for learning **Spring Batch** step by step, one milestone at a time.
-Each milestone builds on the previous one and ends with a clean commit + a working,
-verifiable demo.
+A reference implementation of reliable, fault-tolerant batch processing with **Spring Batch 5** and **Spring Boot 3.5.16**. Built incrementally across seven milestones, it demonstrates production-relevant patterns with concrete, verifiable, and runnable demos.
+
+## What it demonstrates
+
+- **Chunk-oriented processing** – CSV ingestion with `FlatFileItemReader`, domain transformation in an `ItemProcessor`, and persistence via `JpaItemWriter` with proper transaction boundaries
+- **Reliability & restartability** – Correct `JobInstance` identity, `@StepScope` reader state, and resume-from-last-committed-chunk semantics after a failed execution
+- **Resilience & fault tolerance** – `faultTolerant()` with `.skip()`/`.skipLimit()` to drop bad records and `.retry()`/`.retryLimit()` to recover from transient failures without data loss
+- **Asynchronous execution** – Offloads job launches to background threads via a `@BatchTaskExecutor`-qualified `TaskExecutor` so REST calls return `202 Accepted` immediately
+- **Scheduling** – Cron-based execution with `@EnableScheduling`/`@Scheduled`, plus a `JobExplorer`-backed status endpoint for inspection
+- **Operational observability** – Leverages Spring Batch metadata tables to prove restart, skip, retry and execution state in practice
 
 ## Tech stack
 
