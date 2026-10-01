@@ -1,2 +1,8 @@
-###
-POST localhost:8080/api/jobs?failAtRow=0&skipEvery=1000&flakyWrites=2
+### Skip demo: bad rows (every 1000th) are dropped, job completes
+POST localhost:8080/api/jobs?failAtRow=0&skipEvery=1000&flakyWrites=0
+
+### Retry demo: first 2 writes fail like a locked DB row, retry saves the job
+POST localhost:8080/api/jobs?failAtRow=0&skipEvery=0&flakyWrites=2
+
+### Restart demo: fails at row 5000, re-POST the same URL to resume
+POST localhost:8080/api/jobs?failAtRow=5000&skipEvery=0&flakyWrites=0

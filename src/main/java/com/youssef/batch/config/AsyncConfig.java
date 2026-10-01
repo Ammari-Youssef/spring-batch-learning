@@ -12,7 +12,7 @@ public class AsyncConfig {
     /**
      * Runs each job launch on its own thread (batch-1, batch-2, ...).
      * @BatchTaskExecutor is the qualifier Spring Boot's DefaultBatchConfiguration
-     * looks for without it this bean is ignored and the launcher stays synchronous.
+     * looks for — without it, this bean is ignored and the launcher stays synchronous.
      * SimpleAsyncTaskExecutor = one thread per launch; bounded with a concurrency
      * limit for safety; use a ThreadPoolTaskExecutor for production.
      */
