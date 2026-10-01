@@ -12,8 +12,8 @@
     <artifactId>spring-batch-learning</artifactId>
     <version>0.0.1-SNAPSHOT</version>
     <name>spring-batch-learning</name>
-    <description>Spring Batch learning project</description>
-    <url/>
+    <description>Step-by-step Spring Batch: chunked processing, job parameters and late binding, job restart, async launch, skip/retry and cron scheduling</description>
+    <url>https://github.com/Ammari-Youssef/spring-batch-learning</url>
     <licenses>
         <license/>
     </licenses>
